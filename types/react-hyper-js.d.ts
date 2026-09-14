@@ -1,0 +1,1 @@
+declare module "@juspay-tech/react-hyper-js";
