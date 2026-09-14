@@ -12,7 +12,11 @@ import {
 const publishableKey =
   process.env.NEXT_PUBLIC_HYPERSWITCH_PUBLISHABLE_KEY;
 
-function CheckoutForm() {
+function CheckoutForm({
+  reservationId,
+}: {
+  reservationId: string;
+}) {
   const hyper = useHyper();
   const elements = useElements();
 
@@ -31,11 +35,15 @@ function CheckoutForm() {
     setIsSubmitting(true);
     setMessage("");
 
+    const returnUrl =
+      `${window.location.origin}/payment-return` +
+      `?reservation_id=${encodeURIComponent(reservationId)}`;
+
     try {
       const result = await hyper.confirmPayment({
         elements,
         confirmParams: {
-          return_url: `${window.location.origin}/payment-return`,
+          return_url: returnUrl,
         },
         redirect: "if_required",
       });
@@ -47,14 +55,16 @@ function CheckoutForm() {
         return;
       }
 
-      setMessage(
-        result.status
-          ? `Payment submitted: ${result.status}`
-          : "Payment submitted."
-      );
+      /*
+       * If the payment method did not require an external redirect,
+       * send the customer to the same return page ourselves.
+       *
+       * The return page does NOT trust this as proof of payment.
+       * It calls the backend verification endpoint.
+       */
+      window.location.href = returnUrl;
     } catch (error) {
       console.error("Payment confirmation failed:", error);
-
       setMessage("Unable to complete payment.");
     } finally {
       setIsSubmitting(false);
@@ -97,6 +107,9 @@ export default function CheckoutPage() {
   const [clientSecret, setClientSecret] =
     useState<string | null>(null);
 
+  const [reservationId, setReservationId] =
+    useState<string | null>(null);
+
   const [hyperPromise, setHyperPromise] =
     useState<ReturnType<typeof loadHyper> | null>(null);
 
@@ -113,14 +126,6 @@ export default function CheckoutPage() {
         return;
       }
 
-      /*
-       * loadHyper needs access to browser APIs like `document`,
-       * so we initialize it inside useEffect rather than at the
-       * top level of the module.
-       *
-       * The ref prevents us from initializing HyperLoader more
-       * than once during React development behavior.
-       */
       if (!hyperInitialized.current) {
         hyperInitialized.current = true;
 
@@ -131,15 +136,17 @@ export default function CheckoutPage() {
         );
       }
 
-      const reservationId =
+      const id =
         new URLSearchParams(window.location.search).get(
           "reservation_id"
         );
 
-      if (!reservationId) {
+      if (!id) {
         setError("reservation_id is required.");
         return;
       }
+
+      setReservationId(id);
 
       try {
         const response = await fetch("/api/payments", {
@@ -148,7 +155,7 @@ export default function CheckoutPage() {
             "Content-Type": "application/json",
           },
           body: JSON.stringify({
-            reservation_id: reservationId,
+            reservation_id: id,
           }),
         });
 
@@ -186,7 +193,7 @@ export default function CheckoutPage() {
     );
   }
 
-  if (!clientSecret || !hyperPromise) {
+  if (!clientSecret || !hyperPromise || !reservationId) {
     return (
       <main className="p-8">
         <p>Loading checkout...</p>
@@ -206,7 +213,7 @@ export default function CheckoutPage() {
           clientSecret,
         }}
       >
-        <CheckoutForm />
+        <CheckoutForm reservationId={reservationId} />
       </HyperElements>
     </main>
   );
