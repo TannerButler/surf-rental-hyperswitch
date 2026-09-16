@@ -34,7 +34,6 @@ export async function POST(
     );
   }
 
-  // 1. Load our trusted reservation + payment relationship.
   let record: ReservationPaymentRow | undefined;
 
   try {
@@ -54,7 +53,10 @@ export async function POST(
 
     record = rows[0] as ReservationPaymentRow | undefined;
   } catch (error) {
-    console.error("Failed to load reservation/payment:", error);
+    console.error(
+      "Failed to load reservation/payment:",
+      error
+    );
 
     return Response.json(
       { error: "Failed to load reservation" },
@@ -73,7 +75,9 @@ export async function POST(
   const baseUrl = process.env.HYPERSWITCH_BASE_URL;
 
   if (!apiKey || !baseUrl) {
-    console.error("Hyperswitch environment variables are missing");
+    console.error(
+      "Hyperswitch environment variables are missing"
+    );
 
     return Response.json(
       { error: "Payment service is not configured" },
@@ -81,12 +85,14 @@ export async function POST(
     );
   }
 
-  // 2. Retrieve payment from Hyperswitch server-side.
   let payment: HyperswitchPayment;
 
   try {
     const response = await fetch(
-      `${baseUrl.replace(/\/$/, "")}/payments/${record.hyperswitch_payment_id}?force_sync=true`,
+      `${baseUrl.replace(
+        /\/$/,
+        ""
+      )}/payments/${record.hyperswitch_payment_id}?force_sync=true`,
       {
         method: "GET",
         headers: {
@@ -113,7 +119,10 @@ export async function POST(
 
     payment = responseBody as HyperswitchPayment;
   } catch (error) {
-    console.error("Hyperswitch verification request failed:", error);
+    console.error(
+      "Hyperswitch verification request failed:",
+      error
+    );
 
     return Response.json(
       { error: "Unable to verify payment" },
@@ -121,14 +130,15 @@ export async function POST(
     );
   }
 
-  // 3. Verify identity and monetary values.
   if (
-    payment.payment_id !== record.hyperswitch_payment_id ||
+    payment.payment_id !==
+      record.hyperswitch_payment_id ||
     payment.amount !== record.amount_cents ||
     payment.currency !== record.currency
   ) {
     console.error("Payment verification mismatch", {
-      expectedPaymentId: record.hyperswitch_payment_id,
+      expectedPaymentId:
+        record.hyperswitch_payment_id,
       actualPaymentId: payment.payment_id,
       expectedAmount: record.amount_cents,
       actualAmount: payment.amount,
@@ -142,7 +152,6 @@ export async function POST(
     );
   }
 
-  // 4. Successful verification does NOT necessarily mean successful payment.
   if (payment.status !== "succeeded") {
     try {
       await sql`
@@ -153,7 +162,10 @@ export async function POST(
         WHERE reservation_id = ${reservationId}
       `;
     } catch (error) {
-      console.error("Failed to update payment status:", error);
+      console.error(
+        "Failed to update payment status:",
+        error
+      );
 
       return Response.json(
         { error: "Failed to update payment status" },
@@ -164,12 +176,12 @@ export async function POST(
     return Response.json({
       reservation_id: reservationId,
       payment_status: payment.status,
-      reservation_status: record.reservation_status,
+      reservation_status:
+        record.reservation_status,
       confirmed: false,
     });
   }
 
-  // 5. Only "succeeded" is allowed to confirm the reservation.
   try {
     await sql.transaction([
       sql`
